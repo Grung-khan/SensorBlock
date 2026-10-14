@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Device-owner / device-admin policies SensorBlock may use. Kept minimal:
+     the app only needs the camera restriction; everything is applied through
+     DevicePolicyManager at runtime. -->
+<device-admin xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-policies>
+        <disable-camera />
+    </uses-policies>
+</device-admin>

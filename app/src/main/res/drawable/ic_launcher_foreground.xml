@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adaptive-icon foreground: a radiating "sensor" glyph, struck through. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- centre emitter -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M49,62 a5,5 0 1,0 10,0 a5,5 0 1,0 -10,0" />
+
+    <!-- inner wave -->
+    <path
+        android:pathData="M38,62 a16,16 0 0,1 32,0"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="5.5"
+        android:strokeLineCap="round" />
+
+    <!-- outer wave -->
+    <path
+        android:pathData="M27,62 a27,27 0 0,1 54,0"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="5.5"
+        android:strokeLineCap="round" />
+
+    <!-- the block: a slash carved out of the wave field -->
+    <path
+        android:pathData="M29,88 L79,38"
+        android:strokeColor="#FF1B3B57"
+        android:strokeWidth="13"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M29,88 L79,38"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="6"
+        android:strokeLineCap="round" />
+</vector>

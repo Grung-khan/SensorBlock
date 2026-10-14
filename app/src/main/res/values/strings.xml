@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SensorBlock</string>
+
+    <string name="notif_channel_reassert">Policy enforcement</string>
+    <string name="notif_channel_reassert_desc">Keeps the selected sensor, camera and microphone blocks applied.</string>
+    <string name="notif_reassert_title">SensorBlock is enforcing your policy</string>
+    <string name="notif_reassert_text">Blocks are applied and will be re-applied after reboot or reconnect.</string>
+
+    <string name="device_admin_description">Lets SensorBlock disable the camera and mute the microphone at the system level, independently of Shizuku.</string>
+</resources>

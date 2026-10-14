@@ -1,0 +1,20 @@
+# Gradle
+.gradle/
+build/
+**/build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Local machine config (SDK path) — never commit
+local.properties
+
+# Kotlin / IntelliJ
+.kotlin/
+.idea/
+*.iml
+*.hprof
+
+# Rust (crates not created yet; ignore build output when they are)
+crates/**/target/
+
+# OS
+.DS_Store

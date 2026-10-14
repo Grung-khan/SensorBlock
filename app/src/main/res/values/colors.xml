@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Seed colour for the Compose Material 3 colour scheme (see ui/theme/Color.kt). -->
+    <color name="seed_primary">#35597A</color>
+    <color name="seed_background">#FFFBFE</color>
+</resources>
