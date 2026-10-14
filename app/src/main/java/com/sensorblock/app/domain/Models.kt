@@ -3,20 +3,14 @@ package com.sensorblock.app.domain
 /**
  * The privileged identity that performs an enforcement action.
  *
- * SensorBlock layers all available identities so a block survives if one layer
- * is bypassed. See AGENTS.md §4 (capability matrix) and §5.2.
+ * SensorBlock performs all enforcement through Shizuku: it is the only non-root
+ * identity allowed to reach the sensor-privacy service (AGENTS.md §3.1, §5.2).
  */
 enum class BackendKind(val label: String, val blurb: String) {
     SHIZUKU(
         "Shizuku",
         "Runs as uid 2000 (shell), the only non-root identity allowed to use the " +
             "sensor-privacy service. Covers every sensor, camera and microphone.",
-    ),
-    DEVICE_POLICY(
-        "Device policy",
-        "Uses DevicePolicyManager for a hard camera restriction that survives " +
-            "independently of Shizuku. Needs the app to be an active device admin " +
-            "(or device owner for the microphone restriction).",
     ),
 }
 
@@ -28,11 +22,6 @@ enum class Lever {
     CAMERA_PRIVACY,
     /** Per-sensor privacy toggle for the microphone (`SensorPrivacyManager.Sensors.MICROPHONE`). */
     MICROPHONE_PRIVACY,
-    /** `DevicePolicyManager.setCameraDisabled` / `DISALLOW_CAMERA`. */
-    CAMERA_ADMIN,
-    /** `DevicePolicyManager.addUserRestriction(DISALLOW_UNMUTE_MICROPHONE)`. */
-    MICROPHONE_ADMIN,
-    ;
 }
 
 /**
@@ -152,9 +141,6 @@ data class ObservedState(
     val allSensorPrivacy: Boolean? = null,
     val cameraPrivacyToggle: Boolean? = null,
     val microphonePrivacyToggle: Boolean? = null,
-    val cameraAdminDisabled: Boolean? = null,
-    val cameraUserRestriction: Boolean? = null,
-    val microphoneRestricted: Boolean? = null,
     /** package -> set of AppOps currently ignored/denied. */
     val blockedAppOps: Map<String, Set<AppOpKind>> = emptyMap(),
     /** package -> whether its sensors are currently forced idle. */
@@ -163,11 +149,9 @@ data class ObservedState(
 ) {
     val allSensorsBlocked: Boolean get() = allSensorPrivacy == true
     val cameraBlocked: Boolean
-        get() = allSensorPrivacy == true || cameraPrivacyToggle == true ||
-            cameraAdminDisabled == true || cameraUserRestriction == true
+        get() = allSensorPrivacy == true || cameraPrivacyToggle == true
     val microphoneBlocked: Boolean
-        get() = allSensorPrivacy == true || microphonePrivacyToggle == true ||
-            microphoneRestricted == true
+        get() = allSensorPrivacy == true || microphonePrivacyToggle == true
 }
 
 /** What the current device + identities can actually do. */
@@ -180,16 +164,12 @@ data class Capabilities(
     val sensorPrivacyServiceReachable: Boolean = false,
     /** Sensor ids (SensorPrivacyManager.Sensors) that the device supports toggling. */
     val toggleableSensors: Set<Int> = emptySet(),
-    val deviceAdminActive: Boolean = false,
-    val deviceOwner: Boolean = false,
 ) {
     val canBlockAllSensors: Boolean get() = sensorPrivacyServiceReachable
-    val canBlockCamera: Boolean
-        get() = sensorPrivacyServiceReachable || deviceAdminActive || deviceOwner
-    val canBlockMicrophone: Boolean
-        get() = sensorPrivacyServiceReachable || deviceOwner
+    val canBlockCamera: Boolean get() = sensorPrivacyServiceReachable
+    val canBlockMicrophone: Boolean get() = sensorPrivacyServiceReachable
     val canControlApps: Boolean get() = shellServiceReady
-    val anyBackendReady: Boolean get() = sensorPrivacyServiceReachable || deviceAdminActive
+    val anyBackendReady: Boolean get() = sensorPrivacyServiceReachable
 }
 
 /** A human-readable problem to surface in the UI/diagnostics. */

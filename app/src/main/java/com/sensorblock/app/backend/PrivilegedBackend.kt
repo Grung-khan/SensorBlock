@@ -42,9 +42,6 @@ fun ObservedState.overlayMissing(other: ObservedState): ObservedState = Observed
     allSensorPrivacy = allSensorPrivacy ?: other.allSensorPrivacy,
     cameraPrivacyToggle = cameraPrivacyToggle ?: other.cameraPrivacyToggle,
     microphonePrivacyToggle = microphonePrivacyToggle ?: other.microphonePrivacyToggle,
-    cameraAdminDisabled = cameraAdminDisabled ?: other.cameraAdminDisabled,
-    cameraUserRestriction = cameraUserRestriction ?: other.cameraUserRestriction,
-    microphoneRestricted = microphoneRestricted ?: other.microphoneRestricted,
     blockedAppOps = blockedAppOps + other.blockedAppOps,
     appSensorIdle = appSensorIdle + other.appSensorIdle,
     readAtEpochMs = maxOf(readAtEpochMs, other.readAtEpochMs),
@@ -60,6 +57,4 @@ fun Capabilities.merge(other: Capabilities): Capabilities = Capabilities(
     sensorPrivacyServiceReachable =
         sensorPrivacyServiceReachable || other.sensorPrivacyServiceReachable,
     toggleableSensors = toggleableSensors + other.toggleableSensors,
-    deviceAdminActive = deviceAdminActive || other.deviceAdminActive,
-    deviceOwner = deviceOwner || other.deviceOwner,
 )

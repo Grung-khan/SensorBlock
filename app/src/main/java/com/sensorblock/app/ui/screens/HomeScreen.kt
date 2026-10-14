@@ -22,7 +22,6 @@ import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.ShieldMoon
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -134,15 +133,15 @@ fun HomeScreen(state: UiState, actions: AppActions, modifier: Modifier = Modifie
 
         Panel {
             Text(
-                text = "Layered enforcement",
+                text = "How blocking works",
                 style = MaterialTheme.typography.titleSmall,
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                text = "SensorBlock applies every primitive that does not conflict, so a " +
-                    "block survives if one layer is bypassed. The camera, for example, is " +
-                    "blocked by the privacy toggle, by device policy, and — when enabled — " +
-                    "per app.",
+                text = "SensorBlock enforces every block through the Shizuku shell " +
+                    "(uid 2000), the only non-root identity allowed to drive the " +
+                    "sensor-privacy service. The master switch blocks the camera and " +
+                    "the microphone as well as every hardware sensor.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -230,41 +229,6 @@ private fun BackendPanel(state: UiState, actions: AppActions) {
             }
             TextButton(onClick = actions.openShizuku) { Text("Open Shizuku") }
         }
-
-        Spacer(Modifier.height(18.dp))
-
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Filled.ShieldMoon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text("Device policy", style = MaterialTheme.typography.titleSmall)
-                Text(
-                    text = when {
-                        caps.deviceOwner ->
-                            "Device owner. Hard camera and microphone restrictions are enforced by the system."
-                        caps.deviceAdminActive ->
-                            "Device admin. The camera is blocked by CameraService itself. " +
-                                "Microphone hardening needs device owner."
-                        else ->
-                            "Not active. Enabling device admin adds a camera block that " +
-                                "survives independently of Shizuku."
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Spacer(Modifier.width(8.dp))
-            StatusChip(
-                text = when {
-                    caps.deviceOwner -> "Owner"
-                    caps.deviceAdminActive -> "Admin"
-                    else -> "Off"
-                },
-                color = if (caps.deviceAdminActive) extras.protected.copy(alpha = 0.22f)
-                else MaterialTheme.colorScheme.surfaceVariant,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-            )
-        }
     }
 }
 
@@ -347,17 +311,12 @@ private fun heroDetail(state: UiState): String = when {
 }
 
 private fun supportingCamera(state: UiState): String? = when {
-    state.capabilities.deviceAdminActive && state.capabilities.sensorPrivacyServiceReachable ->
-        "Two independent layers active: camera privacy toggle and device policy."
-    state.capabilities.deviceAdminActive -> "Enforced by device policy (CameraService)."
-    !state.capabilities.canBlockCamera -> "Needs Shizuku or device admin."
+    !state.capabilities.canBlockCamera -> "Needs Shizuku."
     else -> null
 }
 
 private fun supportingMicrophone(state: UiState): String? = when {
-    state.capabilities.deviceOwner -> "Both the privacy toggle and the unmute restriction are set."
-    !state.capabilities.canBlockMicrophone ->
-        "Needs Shizuku. The unmute restriction alone requires device owner."
+    !state.capabilities.canBlockMicrophone -> "Needs Shizuku."
     else -> null
 }
 

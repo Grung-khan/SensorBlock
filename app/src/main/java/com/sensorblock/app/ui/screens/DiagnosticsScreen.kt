@@ -109,9 +109,6 @@ fun DiagnosticsScreen(state: UiState, actions: AppActions, modifier: Modifier = 
                 DetailRow("All-sensor switch", triState(observed.allSensorPrivacy))
                 DetailRow("Camera privacy toggle", triState(observed.cameraPrivacyToggle))
                 DetailRow("Microphone privacy toggle", triState(observed.microphonePrivacyToggle))
-                DetailRow("Camera disabled by policy", triState(observed.cameraAdminDisabled))
-                DetailRow("no_camera restriction", triState(observed.cameraUserRestriction))
-                DetailRow("no_unmute_microphone", triState(observed.microphoneRestricted))
                 DetailRow(
                     "Per-app AppOps managed",
                     state.policy.appOpBlocks.keys.size.toString(),
@@ -141,8 +138,6 @@ fun DiagnosticsScreen(state: UiState, actions: AppActions, modifier: Modifier = 
                     caps.toggleableSensors.joinToString { sensorName(it) }
                         .ifEmpty { "none reported" },
                 )
-                DetailRow("Device admin active", yesNo(caps.deviceAdminActive))
-                DetailRow("Device owner", yesNo(caps.deviceOwner))
             }
         }
 

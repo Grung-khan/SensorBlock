@@ -1,7 +1,6 @@
 package com.sensorblock.app.domain
 
 import android.content.Context
-import com.sensorblock.app.backend.DevicePolicyBackend
 import com.sensorblock.app.backend.PrivilegedBackend
 import com.sensorblock.app.backend.ShizukuBackend
 import com.sensorblock.app.backend.merge
@@ -25,9 +24,8 @@ import kotlinx.coroutines.withContext
 class PolicyEngine(private val context: Context) {
 
     val shizuku = ShizukuBackend(context)
-    val devicePolicy = DevicePolicyBackend(context)
 
-    private val backends: List<PrivilegedBackend> = listOf(shizuku, devicePolicy)
+    private val backends: List<PrivilegedBackend> = listOf(shizuku)
 
     /** Merged view of what the current device and identities can do. */
     suspend fun capabilities(): Capabilities = withContext(Dispatchers.IO) {
@@ -104,8 +102,8 @@ class PolicyEngine(private val context: Context) {
                 Issue(
                     severity = Issue.Severity.ERROR,
                     title = "Camera block is not active",
-                    detail = "Neither the camera privacy toggle nor device policy took effect.",
-                    fix = "Grant Shizuku permission, or enable SensorBlock as a device admin.",
+                    detail = "The camera privacy toggle did not take effect.",
+                    fix = "Grant Shizuku permission, then re-apply.",
                 ),
             )
         }
@@ -114,7 +112,7 @@ class PolicyEngine(private val context: Context) {
                 Issue(
                     severity = Issue.Severity.ERROR,
                     title = "Microphone block is not active",
-                    detail = "Neither the microphone privacy toggle nor a user restriction took effect.",
+                    detail = "The microphone privacy toggle did not take effect.",
                     fix = "Grant Shizuku permission.",
                 ),
             )
@@ -124,19 +122,8 @@ class PolicyEngine(private val context: Context) {
                 Issue(
                     severity = Issue.Severity.WARNING,
                     title = "Shizuku is not authorised",
-                    detail = "Without Shizuku, only the device-admin camera block is available.",
+                    detail = "Every block runs through Shizuku; without it nothing can be enforced.",
                     fix = "Install Shizuku, start its server, then grant SensorBlock permission.",
-                ),
-            )
-        }
-        if (!capabilities.deviceOwner && desired.effectiveBlockMicrophone) {
-            add(
-                Issue(
-                    severity = Issue.Severity.INFO,
-                    title = "Microphone hardening layer is unavailable",
-                    detail = "The no_unmute_microphone restriction needs SensorBlock to be the device owner. " +
-                        "The Shizuku microphone toggle is still blocking audio capture.",
-                    fix = DevicePolicyBackend.deviceOwnerCommand(context.packageName),
                 ),
             )
         }

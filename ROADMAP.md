@@ -46,7 +46,7 @@ Device-specific corrections to the research (see `AGENTS.md` §3.1 addendum):
 
 Still outstanding:
 
-1. Per-app `appops` / `set-uid-state`, device-owner layer and persistence-on-reboot
+1. Per-app `appops` / `set-uid-state` and persistence-on-reboot
    are not yet verified on device (§7).
 2. The Rust crates (`crates/`) do not exist yet (§5.5).
 
@@ -62,8 +62,8 @@ recorded in `AGENTS.md` §5.3 and §6.1.
 - [x] Establish the **hard limit**: non-privacy sensors have no per-sensor switch;
       only the device-wide all-sensor block exists (`AGENTS.md` §3.5).
 - [x] Lock the design decisions (`AGENTS.md` §8): grouped block + independent
-      Camera/Mic; Compose/M3; layered Shizuku **and** device-owner; Rust CLI +
-      native self-test; package `com.sensorblock.app`.
+      Camera/Mic; Compose/M3; **Shizuku-only** backend (device owner later dropped);
+      Rust CLI + native self-test; package `com.sensorblock.app`.
 
 ## Milestone 1 — Make it compile ✅
 
@@ -94,11 +94,10 @@ Install and provision (see `AGENTS.md` §6.2–§6.4; remember debug → package
 - [x] Camera privacy toggle blocks the camera (`CameraAccessException:
       CAMERA_DISABLED — Camera "0" disabled by policy`).
 - [x] Microphone privacy toggle silences recordings.
-- [ ] Device-owner backend: **not reachable on this device** — it has multiple users
-      (multiple profiles) and many accounts, so `dpm
-      set-device-owner` returns `STATUS_NONSYSTEM_USER_EXISTS`. A device owner
-      cannot be installed without removing those. (Also, an active *device admin*
-      is not enough: `disable-camera` is owner-only on API 31+.)
+- [x] ~~Device-owner backend~~ **dropped** — unreachable on this device (multiple users and accounts → `dpm set-device-owner`
+      returns `STATUS_NONSYSTEM_USER_EXISTS`) and redundant with Shizuku. The DPM
+      code, device-admin receiver and `device_admin.xml` were removed; the app is
+      now Shizuku-only.
 - [ ] Per-app `appops` and `cmd sensorservice set-uid-state` block only the target.
 - [x] **Reversibility**: every toggle-off restores the exact prior OS state
       (camera toggle, mic toggle, all-sensor all verified on↔off).
@@ -117,8 +116,8 @@ Fixes found during verification (all committed):
 - Mic self-test false-positived "BLOCKED" on a cold `AudioRecord`; it now
   discards warm-up buffers and reads over a 1.5 s window.
 - Camera/mic reads used the software toggle type; switched to the combined query.
-- `DevicePolicyBackend` treated a plain device admin as camera-capable; now
-  requires ownership, so it skips cleanly instead of throwing.
+- The device-policy backend (DPM) is **removed** — Shizuku alone covers every
+  block, so the device-admin receiver and owner-only paths were deleted.
 
 Definition of done: the §7 verification matrix is filled in with real results.
 
@@ -154,10 +153,12 @@ self-test and an external sensor-test app.
 | All-sensor switch | yes | no sensor events; camera refused; mic silenced | ✅ sensors + mic blocked; **camera NOT blocked on this ROM** |
 | Camera privacy toggle | yes (all lenses) | camera will not open | ✅ `CAMERA_DISABLED — disabled by policy` |
 | Mic privacy toggle | yes | recordings silent / muted | ✅ silent capture (peak 0) |
-| `setCameraDisabled` / `DISALLOW_CAMERA` | yes | camera refused at CameraService | ⛔ needs device owner (unreachable here) |
-| `no_unmute_microphone` | yes | mic forced muted | ⛔ needs device owner |
 | `appops … ignore` | per-app | only that app is refused | ☐ not yet tested |
 | `sensorservice set-uid-state idle` | per-app | that app sees no sensors | ☐ not yet tested |
+
+Removed (Shizuku-only now): `DevicePolicyManager.setCameraDisabled`,
+`DISALLOW_CAMERA` and `DISALLOW_UNMUTE_MICROPHONE` are no longer used — they need
+device ownership, which is unreachable here (`AGENTS.md` §3.3, §8).
 
 Test setup: an OEM device, Android 13, non-rooted; Shizuku v13.6.0 server as uid 2000;
 SensorBlock debug build, hidden-API exemptions enabled. Ground truth read with

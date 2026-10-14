@@ -6,9 +6,9 @@
          SensorBlock — personal, no-root sensor/camera/microphone blocker.
 
          The app never asks for a dangerous permission to do the blocking: the
-         blocking is performed with uid 2000 (shell) through Shizuku, or by the
-         system as this app's device-owner privileges. The permissions below are
-         only for the *UI* (listing sensors/apps) and for the re-assert service.
+         blocking is performed with uid 2000 (shell) through Shizuku. The
+         permissions below are only for the *UI* (listing sensors/apps) and for
+         the re-assert service.
          =================================================================== -->
 
     <!-- Inventory + diagnostics: enumerate every sensor and read it in a self-test. -->
@@ -28,8 +28,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
-    <!-- Shizuku's provider refuses to be reached unless the app declares this. -->
-    <uses-feature android:name="android.software.device_admin" android:required="false" />
+    <!-- Optional hardware: the app degrades gracefully when a feature is absent. -->
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
     <uses-feature android:name="android.hardware.sensor.accelerometer" android:required="false" />
@@ -67,22 +66,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
-        <!-- Device-owner / device-admin backend (hard camera + mic restrictions). -->
-        <receiver
-            android:name=".admin.SensorBlockDeviceAdminReceiver"
-            android:exported="true"
-            android:label="@string/app_name"
-            android:permission="android.permission.BIND_DEVICE_ADMIN">
-            <meta-data
-                android:name="android.app.device_admin"
-                android:resource="@xml/device_admin" />
-            <intent-filter>
-                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
-                <action android:name="android.app.action.DEVICE_OWNER_CHANGED" />
-                <action android:name="android.app.action.PROFILE_PROVISIONING_COMPLETE" />
-            </intent-filter>
-        </receiver>
 
         <!-- Re-assert policy on boot and when packages change. -->
         <receiver

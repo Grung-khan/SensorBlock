@@ -14,7 +14,7 @@ Read it fully before changing code. It records **verified AOSP behaviour**, the
 
 - Block **every sensor** the device exposes, plus **camera (all lenses)** and
   **microphone**, for **all apps and system services** — ideally unbypassable.
-- **No root.** Device-owner privileges and ADB-based setup are allowed.
+- **No root.** ADB-based setup via **Shizuku** (uid 2000) is the only elevation.
 - Every block is **reversible** through a toggle; turning a toggle off must undo
   exactly what turning it on did (idempotent `apply(desiredState)` model, not
   fire-and-forget).
@@ -24,8 +24,10 @@ Read it fully before changing code. It records **verified AOSP behaviour**, the
 ## 2. Hard constraints & environment
 
 - **No root.** This is non-negotiable.
-- Allowed elevation: **Shizuku** (ADB shell uid 2000), **Dhizuku** (device owner
-  delegation), **`dpm set-device-owner`** via ADB.
+- Allowed elevation: **Shizuku** (ADB shell uid 2000) — the only backend used.
+  Device-owner / Dhizuku / `dpm set-device-owner` were evaluated (§3.3) but
+  **dropped**: Shizuku alone covers every primitive the app needs, and device
+  ownership is unreachable on the target device (multiple users/accounts).
 - Machine toolchain (verified):
   - JDK 21 (`/usr/lib/jvm/java-21-openjdk-amd64`)
   - Gradle 8.11.1 (cached dist: `~/.gradle/wrapper/dists/gradle-8.11.1-all/*/gradle-8.11.1/bin/gradle`)
@@ -142,7 +144,15 @@ adb shell cmd sensorservice restrict-ht / unrestrict-ht      # head-tracker only
 `restrict <pkg>` (a volatile CTS allowlist mode: all sensors off for everyone
 except one package) and `enable`. These are **not persisted**.
 
-### 3.3 Device-owner APIs (persistent, enforced in system services)
+### 3.3 Device-owner APIs (persistent, enforced in system services) — **NOT USED**
+
+> **Dropped.** SensorBlock no longer uses DevicePolicyManager at all. Shizuku
+> already covers every block the app needs (all-sensor + camera/mic toggles +
+> appops), and device ownership is unreachable on the target device (it has
+> multiple users and accounts, so `dpm set-device-owner` fails with
+> `STATUS_NONSYSTEM_USER_EXISTS`). The `disable-camera` policy additionally
+> requires device/profile **owner** on API 31+ (§3.1), so a plain device admin
+> buys nothing. The findings below are retained for reference only.
 
 Reachable via Dhizuku (delegated) or by installing our own app as device owner
 with `adb shell dpm set-device-owner <pkg>/<receiver>` (device must have **no**
@@ -212,17 +222,17 @@ service + `BOOT_COMPLETED` receiver should still re-assert volatile primitives.
 | Toggle (UI) | Backend primitive(s) | Scope | Independent? |
 |---|---|---|---|
 | **Master: block all sensors** | `ISensorPrivacyManager.setSensorPrivacy(true)` (all) | device-wide; **all sensors + camera + mic (records silenced)** | yes |
-| **Camera** | camera privacy toggle; **+** device-owner `setCameraDisabled` / `DISALLOW_CAMERA`; **+** optional per-app `CAMERA ignore` | device-wide / per-app | yes |
-| **Microphone** | mic privacy toggle; **+** `DISALLOW_UNMUTE_MICROPHONE` | device-wide | yes |
+| **Camera** | camera privacy toggle; **+** optional per-app `CAMERA ignore` | device-wide / per-app | yes |
+| **Microphone** | mic privacy toggle | device-wide | yes |
 | Accelerometer / Gyro / Magnetometer / Proximity / Light / Pressure / Humidity / Step / etc. | **only** the all-sensor switch (group block) | device-wide, all together | **no** |
 | GNSS / location | `appops FINE_LOCATION ignore` (per-app) | per-app only | per-app |
 | Per-app (any sensor) | `cmd sensorservice set-uid-state <pkg> idle` | per-app, all sensors | per-app |
 | Per-app camera/mic/body/activity | appops | per-app | per-app |
 
 Layering rule: for a given target, apply **every** available primitive that does
-not conflict (e.g. camera = privacy toggle + DPM restriction + appops), so the
+not conflict (e.g. camera = privacy toggle + optional per-app appops), so the
 block survives if one layer is bypassed. State is tracked per-layer so each can
-be undone independently.
+be undone independently. All layers are Shizuku-driven.
 
 ---
 
@@ -237,11 +247,9 @@ Kotlin app (Jetpack Compose, Material 3)
  │    PolicyEngine       – desired state → set of primitives (idempotent reconcile)
  │    SensorInventory    – enumerates sensors via SensorManager
  │    BlockTarget        – CAMERA | MICROPHONE | ALL_SENSORS | SENSOR(type) | APP(pkg)
- ├─ Backend layer (interchangeable, capability-detected):
+ ├─ Backend layer:
  │    PrivilegedBackend (interface)
- │      ├─ ShizukuBackend      – uid 2000; SensorPrivacy AIDL, `cmd`, appops, dumpsys
- │      ├─ DeviceOwnerBackend  – Dhizuku-delegated or own-app DPM (camera/mic hard)
- │      └─ NoBackend           – degrades to per-app appops via UI + instructions
+ │      └─ ShizukuBackend      – uid 2000; SensorPrivacy AIDL, `cmd`, appops, dumpsys
  └─ (optional) Rust native module `libsensorblock.so` for self-test/telemetry
 ```
 
@@ -250,9 +258,9 @@ Key design rules:
 - **Reversible & idempotent.** Everything is `reconcile(desiredState)`:
   compare desired vs *observed* OS state, issue only the diffs. A toggle-off
   reverses exactly its own primitive set.
-- **Capability detection at runtime.** Detect Shizuku availability/version,
-  device-owner status, and `supportsSensorToggle(MICROPHONE|CAMERA)`; hide or
-  badge controls that the device/backends cannot honour.
+- **Capability detection at runtime.** Detect Shizuku availability/version and
+  whether the sensor-privacy service is reachable; hide or badge controls the
+  device cannot honour.
 - **Honesty in UI.** Non-privacy sensor rows are grouped and explicitly labelled
   that turning one off engages the device-wide all-sensor block (they cannot be
   blocked individually without root). No fake granularity.
@@ -260,22 +268,17 @@ Key design rules:
   primitives on `BOOT_COMPLETED`, Shizuku (re)bind, and app resume. Respect
   battery/Doze.
 
-### 5.2 Privileged backends
+### 5.2 Privileged backend
 
-- **Shizuku** (`dev.rikka.shizuku:api` + `:provider`): the primary backend.
+- **Shizuku** (`dev.rikka.shizuku:api` + `:provider`): the only backend.
   - Binder calls into `sensor_privacy` via the AIDL interface resolved at runtime
     (`ServiceManager.getService("sensor_privacy")`, then the generated
     `ISensorPrivacyManager` stub) — avoid raw transaction indices.
   - Shell commands through Shizuku's process API (`newProcess`).
   - Needs (re)activation after reboot; detect and prompt; support the
     wireless-debugging auto-start path on Android 11+.
-- **Device owner** (Dhizuku delegation *or* SensorBlock itself as device owner):
-  used for the **hard** camera/mic restrictions that survive independently of
-  Shizuku. Dhizuku lets a device owner be configured once without a factory
-  reset; installing SensorBlock directly as device owner via ADB is the cleanest
-  for a personal device.
-- **NoBackend** fallback guides the user through ADB setup and still exposes the
-  per-app appops controls the UI can trigger via a one-shot ADB pairing.
+- **Device owner / NoBackend** were dropped: device ownership is unreachable on
+  the target device and Shizuku alone covers every block (§3.3, §8).
 
 ### 5.3 Current layout (scaffold exists; verify before trusting)
 
@@ -298,8 +301,7 @@ SensorBlock/
 │      │   ├─ ui/               (MainViewModel, AppActions, screens/, components/, theme/)
 │      │   ├─ domain/           (Models, PolicyEngine, PolicyStore, SensorInventory, AppInventory, SelfTest)
 │      │   ├─ backend/          (PrivilegedBackend, ShizukuBackend, SensorPrivacyClient,
-│      │   │                     DevicePolicyBackend, ShellServiceClient, ShellUserService)
-│      │   ├─ admin/            (SensorBlockDeviceAdminReceiver)
+│      │   │                     ShellServiceClient, ShellUserService)
 │      │   └─ service/          (ReassertService, BootReceiver)
 │      └─ res/
 ├─ app/src/debug/
@@ -314,7 +316,7 @@ No README, no `opencode.json`, no tests, no CI exist yet.
 
 ### 5.4 UI (Compose, Material 3)
 
-- **Home / Status**: backend status cards (Shizuku ✓/✗, Device owner ✓/✗), one big
+- **Home / Status**: backend status card (Shizuku ✓/✗), one big
   **Master kill switch**, and the two independent **Camera** / **Microphone**
   toggles with prominent state.
 - **Sensors**: list every sensor detected (name, vendor, type, max range, current
@@ -335,7 +337,7 @@ The NDK target `aarch64-linux-android` and NDK 27 are installed. Rust is **not
 required** for enforcement (all enforcement is Binder/shell based). It is used for:
 
 1. A **host-side provisioning CLI** (`sensorblockctl`, crate `crates/sensorblockctl`)
-   that drives `adb`: install the APK, set device owner, start/verify Shizuku,
+   that drives `adb`: install the APK, start/verify Shizuku,
    apply and verify each block by attempting a sensor read, and dump device state.
 2. An in-app native `.so` (`crates/sensorblock-native`) implementing a
    **self-test / verification** engine using the NDK `ASensorManager` API to prove
@@ -404,20 +406,14 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 > **Debug builds get `applicationIdSuffix = ".debug"`** (§`app/build.gradle.kts`), so
 > the installed package is **`com.sensorblock.app.debug`** — not `com.sensorblock.app`.
-> Every adb/`dpm`/Shizuku target below must use the suffixed id for debug installs.
+> Every adb/Shizuku target below must use the suffixed id for debug installs.
 
-### 6.3 Provision one of the backends
+### 6.3 Provision the backend (Shizuku)
 
 ```sh
-# A) Device owner (device must have no accounts; run once)
-#    debug build → use com.sensorblock.app.debug (see §6.2)
-adb shell dpm set-device-owner com.sensorblock.app/.admin.SensorBlockDeviceAdminReceiver
-
-# B) Shizuku (install the Shizuku app, then start its server)
+# Start the Shizuku server (install the Shizuku app first)
 adb shell sh /sdcard/Android/data/moe.shizuku.privileged.api/start.sh
 #   (Android 11+: enable Wireless debugging and start Shizuku from the app)
-
-# C) No-root fallback: run the documented appops/cmd snippets by hand (self-test)
 ```
 
 ### 6.4 Manual verification snippets
@@ -490,10 +486,10 @@ Device quirks this harness works around (do not "fix" these as app bugs):
    Non-privacy sensors are all-or-nothing via the master all-sensor switch; the UI
    never fakes granularity. No root.
 2. **UI stack** → **Kotlin + Jetpack Compose (Material 3).**
-3. **Privileged backend** → **Both, layered:** Shizuku (primary, drives the
-   sensor-privacy service + `cmd`/appops) **and** device owner (Dhizuku delegation
-   and/or SensorBlock installed via `dpm set-device-owner`) for hard
-   CameraService/AudioService restrictions.
+3. **Privileged backend** → **Shizuku only.** It drives the sensor-privacy
+   service (all-sensor + camera/mic toggles) plus `cmd`/appops. Device owner /
+   Dhizuku were later **dropped** (unreachable on the target device; redundant
+   with Shizuku). *(Superseded the original "both, layered" decision.)*
 4. **Rust** → **Include** the provisioning CLI + native self-test (§5.5).
 5. **Scope** → **Sensors + camera + microphone only** (no location/BT/NFC/Wi-Fi/
    screen-capture in v1; the architecture keeps room for them later).
@@ -565,8 +561,8 @@ Summary of the survey (full detail in the session research notes):
 (Sensor Disabler, XPrivacyLua). (2) **OwnDroid** is the closest no-root analogue
 but stops at DevicePolicyManager — it has **no sensor-privacy or mic-toggle
 control**. (3) **Shizuku** is the only no-root identity that can reach the sensor
-privacy service. SensorBlock's niche = *Shizuku + device-owner layered*, with an
-honest grouped-vs-independent UI.
+privacy service. SensorBlock's niche = *Shizuku-only* control of the sensor
+privacy service, with an honest grouped-vs-independent UI.
 
 
 ## 11. Roadmap / task list
@@ -576,14 +572,14 @@ honest grouped-vs-independent UI.
 - [x] Scaffold Gradle project (AGP 8.7.2 / Kotlin 2.0.20 / Compose), wrapper, manifest.
 - [x] Write `SensorInventory` + full Compose UI (status, master switch, cam/mic, apps, diagnostics).
 - [x] Write `PrivilegedBackend` + `ShizukuBackend` (sensor-privacy AIDL, `cmd`, appops).
-- [x] Write device-owner backend (`DevicePolicyBackend`, user restrictions).
+- [x] ~~Write device-owner backend (`DevicePolicyBackend`, user restrictions).~~ **Removed** — Shizuku-only (§3.3, §8).
 - [x] Write `PolicyEngine` reconcile + `PolicyStore` persistence.
 - [x] Write boot/foreground re-assertion (`ReassertService`, `BootReceiver`).
 - [x] Write diagnostics self-test (`SelfTest`).
 - [x] **Make it compile** — `./gradlew :app:assembleDebug` is green; fixes in §6.1 (aidl=true, AIDL all-or-none ids, hidden-API → public equivalents).
 - [x] Add the debug harness (`app/src/debug/**`, §6.5) and start Shizuku on the device.
 - [x] **On-device: all-sensor switch + camera toggle + mic toggle verified** end-to-end through the app (sensors/mic silenced, camera disabled by policy); see `ROADMAP.md` Milestone 2.
-- [ ] On-device: per-app appops / `set-uid-state`, device-owner layer, reboot persistence (§7 matrix).
+- [ ] On-device: per-app appops / `set-uid-state`, reboot persistence (§7 matrix).
 - [ ] Rust provisioning CLI (`sensorblockctl`) + native self-test crate (`crates/` not created).
 
 > Detailed status, ordered next steps and the verification matrix live in

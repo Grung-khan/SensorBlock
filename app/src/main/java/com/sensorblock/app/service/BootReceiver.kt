@@ -12,7 +12,7 @@ import kotlinx.coroutines.launch
 /**
  * Re-applies the policy on boot and after an in-place update.
  *
- * The persisted primitives (sensor privacy, AppOps, device policy) are already
+ * The persisted primitives (sensor privacy, AppOps) are already
  * restored by the system by the time this runs; what this really covers is the
  * in-memory `cmd sensorservice set-uid-state` overrides and kicking Shizuku back
  * into shape.
