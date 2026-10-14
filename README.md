@@ -164,6 +164,24 @@ Working and verified on a physical Android 13 device:
 - [ ] Per-app AppOps / `set-uid-state` and reboot persistence (not yet verified)
 - [ ] Release signing
 
+## Acknowledgements
+
+This app leans entirely on work done by others, and they deserve the credit:
+
+- **opencode** — the open-source AI coding agent by **Anomaly**
+  (github.com/anomalyco/opencode) that designed, wrote and reviewed most of the
+  code here. Thank you to Anomaly and its ~950 contributors.
+- **The model behind this app** — `opencode/big-pickle`, provided **free of cost**
+  through opencode's model offering. The biggest thanks go to whoever builds and
+  funds capable models that anyone can use for nothing.
+- **Shizuku** by **Rikka** (github.com/RikkaApps/Shizuku) — the only non-root
+  identity allowed to drive the sensor-privacy service; SensorBlock would not
+  exist without it.
+- **hiddenapibypass** by **LSPosed** — lets a normal app reach the mirrored
+  `ISensorPrivacyManager` AIDL.
+
+And to the maintainers of every dependency in `app/build.gradle.kts`.
+
 ## Disclaimer
 
 Personal project. It changes device-wide privacy state; while enabled your device
