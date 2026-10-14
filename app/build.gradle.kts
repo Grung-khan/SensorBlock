@@ -16,8 +16,8 @@ android {
         // Personal device is Android 13. targetSdk 33 preserves Android 13 behaviour
         // (no Android 14+ foreground-service / sensor-privacy changes).
         targetSdk = 33
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.1.1"
 
         ndk {
             // Only the target device ABI for now; add armeabi-v7a later if needed.
