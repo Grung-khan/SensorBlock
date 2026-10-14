@@ -19,12 +19,12 @@ import com.sensorblock.app.domain.ReconcileReport
  *
  * | level          | camera                                        | microphone                       |
  * |----------------|-----------------------------------------------|----------------------------------|
- * | device admin   | `setCameraDisabled` (CameraService level)      | –                                |
- * | device owner   | + `DISALLOW_CAMERA` user restriction           | `DISALLOW_UNMUTE_MICROPHONE`     |
+ * | device admin   | – (disable-camera is owner-only on API 31+)    | –                                |
+ * | device owner   | `setCameraDisabled` + `DISALLOW_CAMERA`        | `DISALLOW_UNMUTE_MICROPHONE`     |
  *
  * Both are enforced by the system itself, so they keep working even while
- * Shizuku is down. That is the point of layering: the camera stays blocked by
- * two independent mechanisms when both are available.
+ * Shizuku is down. That is the point of layering: when the app is the device
+ * owner the camera stays blocked by two independent mechanisms.
  */
 class DevicePolicyBackend(private val context: Context) : PrivilegedBackend {
 
@@ -42,8 +42,15 @@ class DevicePolicyBackend(private val context: Context) : PrivilegedBackend {
         dpm?.isDeviceOwnerApp(context.packageName) == true
     }.getOrDefault(false)
 
-    /** True when the app can call the admin/owner-only camera APIs. */
-    private fun hasCameraPrivilege(): Boolean = isAdminActive() || isDeviceOwner()
+    /**
+     * True when the app can call the admin/owner-only camera APIs.
+     *
+     * On API 31+ `disable-camera` is in `DA_DISALLOWED_POLICIES`, so a plain
+     * device admin is **not** enough — only a device owner (or profile owner)
+     * may call [DevicePolicyManager.setCameraDisabled]; a plain admin gets
+     * `SecurityException`. Hence this requires ownership.
+     */
+    private fun hasCameraPrivilege(): Boolean = isDeviceOwner()
 
     /** True when the app can add user restrictions (owner only on Android 13). */
     private fun hasRestrictionPrivilege(): Boolean = isDeviceOwner()
@@ -85,13 +92,13 @@ class DevicePolicyBackend(private val context: Context) : PrivilegedBackend {
 
         // Hard camera block. Applies whenever camera blocking is requested by
         // *any* camera toggle, so the layers reinforce each other.
-        val wantCameraBlocked = desired.blockCamera || desired.blockAllSensors
+        val wantCameraBlocked = desired.effectiveBlockCamera
         actions += adminAction(
             target = "Camera disabled by device policy",
             desired = wantCameraBlocked,
             previous = observed.cameraAdminDisabled,
             available = hasCameraPrivilege(),
-            unavailableReason = "SensorBlock is not an active device admin",
+            unavailableReason = "SensorBlock is not a device owner or profile owner",
         ) { blocked -> dpm?.setCameraDisabled(admin, blocked) }
 
         if (hasRestrictionPrivilege()) {
@@ -105,7 +112,7 @@ class DevicePolicyBackend(private val context: Context) : PrivilegedBackend {
                 setRestriction(DISALLOW_CAMERA, blocked)
             }
 
-            val wantMicRestricted = desired.blockMicrophone || desired.blockAllSensors
+            val wantMicRestricted = desired.effectiveBlockMicrophone
             actions += adminAction(
                 target = "Microphone unmute restriction (no_unmute_microphone)",
                 desired = wantMicRestricted,
@@ -115,7 +122,7 @@ class DevicePolicyBackend(private val context: Context) : PrivilegedBackend {
             ) { restricted ->
                 setRestriction(UserManager.DISALLOW_UNMUTE_MICROPHONE, restricted)
             }
-        } else if (desired.blockMicrophone || desired.blockAllSensors) {
+        } else if (desired.effectiveBlockMicrophone) {
             actions += ReconcileReport.Action(
                 target = "Microphone unmute restriction (no_unmute_microphone)",
                 backend = kind,

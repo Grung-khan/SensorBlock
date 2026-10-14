@@ -130,6 +130,16 @@ data class DesiredPolicy(
     val isEmpty: Boolean
         get() = !blockAllSensors && !blockCamera && !blockMicrophone && blockedApps.isEmpty()
 
+    /**
+     * The master switch is a *superset*: it must block the camera and microphone
+     * too, not just the hardware sensors. On AOSP the all-sensor switch already
+     * implies the camera, but some OEM ROMs (verified on an OEM ROM) ignore the camera
+     * there, so the per-sensor toggles must be driven as well. These are the
+     * values reconcile actually enforces.
+     */
+    val effectiveBlockCamera: Boolean get() = blockCamera || blockAllSensors
+    val effectiveBlockMicrophone: Boolean get() = blockMicrophone || blockAllSensors
+
     /** Number of device-wide switches currently engaged. */
     val activeSwitchCount: Int
         get() = (if (blockAllSensors) 1 else 0) +

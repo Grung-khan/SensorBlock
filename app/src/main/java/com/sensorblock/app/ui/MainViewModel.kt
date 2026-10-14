@@ -46,8 +46,8 @@ data class UiState(
             if (applying) return true
             val o = observed
             return policy.blockAllSensors == (o.allSensorPrivacy == true) &&
-                policy.blockCamera == (o.cameraPrivacyToggle == true) &&
-                policy.blockMicrophone == (o.microphonePrivacyToggle == true)
+                policy.effectiveBlockCamera == (o.cameraPrivacyToggle == true) &&
+                policy.effectiveBlockMicrophone == (o.microphonePrivacyToggle == true)
         }
 }
 

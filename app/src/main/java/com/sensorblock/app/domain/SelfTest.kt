@@ -17,6 +17,7 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.os.Handler
 import android.os.HandlerThread
+import android.os.SystemClock
 import android.util.Log
 import com.sensorblock.app.backend.SensorPrivacyClient
 import kotlinx.coroutines.Dispatchers
@@ -46,12 +47,27 @@ class SelfTest(private val context: Context, private val engine: PolicyEngine) {
 
     suspend fun runAll(): List<Probe> = withContext(Dispatchers.IO) {
         buildList {
-            add(privilegedIdentityProbe())
-            add(sensorPrivacyServiceProbe())
-            add(sensorDataProbe())
-            add(cameraProbe())
-            add(microphoneProbe())
+            add(guard("Privileged identity") { privilegedIdentityProbe() })
+            add(guard("Sensor-privacy service") { sensorPrivacyServiceProbe() })
+            add(guard("Sensor data") { sensorDataProbe() })
+            add(guard("Camera") { cameraProbe() })
+            add(guard("Microphone") { microphoneProbe() })
         }
+    }
+
+    /**
+     * Runs one probe, converting any escaping throwable into an ERROR probe so a
+     * single failure never hides the rest of the diagnostics.
+     */
+    private suspend fun guard(name: String, block: suspend () -> Probe): Probe = try {
+        block()
+    } catch (t: Throwable) {
+        Log.w(TAG, "probe '$name' threw", t)
+        Probe(
+            name = name,
+            verdict = Verdict.ERROR,
+            detail = "Probe failed: ${t.javaClass.simpleName}: ${t.message}",
+        )
     }
 
     // ---------------------------------------------------------------- probes ---
@@ -213,7 +229,13 @@ class SelfTest(private val context: Context, private val engine: PolicyEngine) {
         }
 
         try {
-            val outcome = withTimeout(CAMERA_OPEN_TIMEOUT_MS) { openCamera(manager, cameraId) }
+            val handlerThread = HandlerThread("self-test-camera").apply { start() }
+            val handler = Handler(handlerThread.looper)
+            val outcome = try {
+                withTimeout(CAMERA_OPEN_TIMEOUT_MS) { openCamera(manager, cameraId, handler) }
+            } finally {
+                handlerThread.quitSafely()
+            }
             when (outcome) {
                 is CameraOutcome.Opened -> {
                     outcome.device.close()
@@ -310,19 +332,31 @@ class SelfTest(private val context: Context, private val engine: PolicyEngine) {
             }
             val buffer = ShortArray(minBuffer)
             record.startRecording()
-            delay(RECORD_WINDOW_MS)
-            val read = record.read(buffer, 0, buffer.size)
-            val peak = if (read > 0) buffer.take(read).maxOf { kotlin.math.abs(it.toInt()) } else 0
+            // Discard the first buffers: a freshly started AudioRecord returns
+            // silence while the mic warms up, which would look like a block.
+            val warmup = ShortArray(minBuffer)
+            repeat(WARMUP_BUFFERS) { record.read(warmup, 0, warmup.size) }
+            var peak = 0
+            var totalRead = 0
+            val deadline = SystemClock.elapsedRealtime() + RECORD_WINDOW_MS
+            while (SystemClock.elapsedRealtime() < deadline) {
+                val read = record.read(buffer, 0, buffer.size)
+                if (read > 0) {
+                    totalRead += read
+                    val localPeak = buffer.take(read).maxOf { kotlin.math.abs(it.toInt()) }
+                    if (localPeak > peak) peak = localPeak
+                }
+            }
 
             Probe(
                 name = "Microphone",
                 verdict = if (peak == 0) Verdict.BLOCKED else Verdict.ALLOWED,
                 detail = if (peak == 0) {
-                    "A $RECORD_WINDOW_MS ms capture returned pure silence — recordings are blocked."
+                    "A $RECORD_WINDOW_MS ms capture after warm-up returned pure silence — recordings are blocked."
                 } else {
                     "A $RECORD_WINDOW_MS ms capture returned live audio (peak $peak) — the microphone is open."
                 },
-                evidence = "read=$read peak=$peak micMuted=$muted",
+                evidence = "read=$totalRead peak=$peak micMuted=$muted",
             )
         } catch (t: SecurityException) {
             Probe(
@@ -357,7 +391,11 @@ class SelfTest(private val context: Context, private val engine: PolicyEngine) {
             CameraOutcome
     }
 
-    private suspend fun openCamera(manager: CameraManager, cameraId: String): CameraOutcome =
+    private suspend fun openCamera(
+        manager: CameraManager,
+        cameraId: String,
+        handler: Handler,
+    ): CameraOutcome =
         suspendCancellableCoroutine { continuation ->
             val callback = object : CameraDevice.StateCallback() {
                 override fun onOpened(camera: CameraDevice) {
@@ -389,7 +427,7 @@ class SelfTest(private val context: Context, private val engine: PolicyEngine) {
             }
             continuation.invokeOnCancellation { /* the state callback guards on isActive */ }
             try {
-                manager.openCamera(cameraId, callback, null)
+                manager.openCamera(cameraId, callback, handler)
             } catch (t: Throwable) {
                 if (continuation.isActive) {
                     continuation.resumeWith(Result.failure(t))
@@ -403,6 +441,7 @@ class SelfTest(private val context: Context, private val engine: PolicyEngine) {
         const val TAG = "SelfTest"
         const val SENSOR_SAMPLE_WINDOW_MS = 1_200L
         const val CAMERA_OPEN_TIMEOUT_MS = 2_500L
-        const val RECORD_WINDOW_MS = 600L
+        const val RECORD_WINDOW_MS = 1_500L
+        const val WARMUP_BUFFERS = 4
     }
 }

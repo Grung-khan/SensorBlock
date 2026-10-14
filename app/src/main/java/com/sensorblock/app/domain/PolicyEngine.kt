@@ -99,7 +99,7 @@ class PolicyEngine(private val context: Context) {
                 ),
             )
         }
-        if (desired.blockCamera && !observed.cameraBlocked) {
+        if (desired.effectiveBlockCamera && !observed.cameraBlocked) {
             add(
                 Issue(
                     severity = Issue.Severity.ERROR,
@@ -109,7 +109,7 @@ class PolicyEngine(private val context: Context) {
                 ),
             )
         }
-        if (desired.blockMicrophone && !observed.microphoneBlocked) {
+        if (desired.effectiveBlockMicrophone && !observed.microphoneBlocked) {
             add(
                 Issue(
                     severity = Issue.Severity.ERROR,
@@ -129,7 +129,7 @@ class PolicyEngine(private val context: Context) {
                 ),
             )
         }
-        if (!capabilities.deviceOwner && desired.blockMicrophone) {
+        if (!capabilities.deviceOwner && desired.effectiveBlockMicrophone) {
             add(
                 Issue(
                     severity = Issue.Severity.INFO,

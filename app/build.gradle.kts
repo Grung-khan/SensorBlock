@@ -88,6 +88,11 @@ dependencies {
     implementation("dev.rikka.shizuku:api:13.1.5")
     implementation("dev.rikka.shizuku:provider:13.1.5")
 
+    // The mirrored platform AIDL (ISensorPrivacyManager) is a hidden (non-SDK)
+    // interface; on API 28+ accessing it from the app process is blocked unless we
+    // exempt it at runtime. Shizuku's own guide names this exact library.
+    implementation("org.lsposed.hiddenapibypass:hiddenapibypass:6.1")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
 

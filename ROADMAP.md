@@ -19,17 +19,39 @@ only (§8.5). Identity: package `com.sensorblock.app`, name **SensorBlock**.
 ## Current status snapshot
 
 The full Kotlin app is written (§5.1 architecture) — UI, domain, both privileged
-backends, persistence, boot re-assertion and diagnostics. **It now compiles:**
-`./gradlew :app:assembleDebug` produces `app-debug.apk` (Milestone 1 done).
+backends, persistence, boot re-assertion and diagnostics. **It compiles**
+(Milestone 1) and **it now runs on the real device** (Milestone 2, in progress).
+
+Verified on the target device (**an OEM device, Android 13, non-rooted, Shizuku
+shell**) via the debug harness (`app/src/debug/**`, see `AGENTS.md` §6.5):
+
+- ✅ **All-sensor kill switch works** through the app → Shizuku → `sensor_privacy`.
+  It blocks hardware sensors and silences the microphone.
+- ✅ **Camera privacy toggle works** and blocks the camera ("disabled by policy").
+- ✅ **Microphone privacy toggle works** and silences recordings.
+- ✅ All three are **reversible** (toggle-off restores the exact prior state).
+- ✅ **The master kill switch blocks everything.** Because the all-sensor switch
+  ignores the camera on this ROM, the master switch now also drives the camera and
+  microphone privacy toggles (`DesiredPolicy.effectiveBlockCamera/Microphone`).
+  A single master ON ⇒ sensors + camera + mic all BLOCKED; master OFF ⇒ all clear.
+
+Device-specific corrections to the research (see `AGENTS.md` §3.1 addendum):
+
+- The **all-sensor switch does NOT block the camera on this ROM** (it does on
+  AOSP). Camera blocking here relies on the camera privacy toggle.
+- The per-sensor toggle is read via **`isCombinedToggleSensorPrivacyEnabled`**;
+  a software-only read returns false even when the block is active.
+- **`supportsSensorToggle` returns false** even though the toggle works, so it is
+  no longer used to gate camera/mic capability.
 
 Still outstanding:
 
-1. Nothing has been run on a device; all backend behaviour is unverified (§7).
+1. Per-app `appops` / `set-uid-state`, device-owner layer and persistence-on-reboot
+   are not yet verified on device (§7).
 2. The Rust crates (`crates/`) do not exist yet (§5.5).
 
-Current layout, verified files and the three compile fixes that must not regress
-are recorded in `AGENTS.md` §5.3 and §6.1. Do **not** claim the block works
-until Milestone 2.
+Current layout, verified files and the compile fixes that must not regress are
+recorded in `AGENTS.md` §5.3 and §6.1.
 
 ---
 
@@ -61,22 +83,42 @@ regressed-proof; detail in `AGENTS.md` §6.1):
 
 Definition of done: ✅ APK builds with zero errors.
 
-## Milestone 2 — On-device verification 🔴
+## Milestone 2 — On-device verification 🟠 in progress
 
 Install and provision (see `AGENTS.md` §6.2–§6.4; remember debug → package
-`com.sensorblock.app.debug`) and prove each primitive actually works:
+`com.sensorblock.app.debug`). Driven from `adb` with the debug harness
+(`AGENTS.md` §6.5), since the ROM's `uiautomator` is broken.
 
-- [ ] Shizuku backend: all-sensor kill switch flips (sensors + camera + mic).
-- [ ] Camera privacy toggle blocks every lens.
-- [ ] Microphone privacy toggle mutes / silences recordings.
-- [ ] Device-owner backend: `setCameraDisabled` + `no_unmute_microphone` survive
-      with Shizuku down.
+- [x] Shizuku backend: all-sensor kill switch flips (hardware sensors + mic).
+      **Not** the camera on this ROM — see the §3.1 addendum.
+- [x] Camera privacy toggle blocks the camera (`CameraAccessException:
+      CAMERA_DISABLED — Camera "0" disabled by policy`).
+- [x] Microphone privacy toggle silences recordings.
+- [ ] Device-owner backend: **not reachable on this device** — it has multiple users
+      (multiple profiles) and many accounts, so `dpm
+      set-device-owner` returns `STATUS_NONSYSTEM_USER_EXISTS`. A device owner
+      cannot be installed without removing those. (Also, an active *device admin*
+      is not enough: `disable-camera` is owner-only on API 31+.)
 - [ ] Per-app `appops` and `cmd sensorservice set-uid-state` block only the target.
-- [ ] **Reversibility**: every toggle-off restores the exact prior OS state.
+- [x] **Reversibility**: every toggle-off restores the exact prior OS state
+      (camera toggle, mic toggle, all-sensor all verified on↔off).
 - [ ] **Persistence**: state survives reboot; volatile primitives are re-asserted
       by `ReassertService` / `BootReceiver`.
-- [ ] Diagnostics self-test reports `BLOCKED` for each blocked target.
+- [x] Diagnostics self-test reports `BLOCKED` for each blocked target (camera,
+      microphone, sensor data).
 - [ ] Run the §7 bypass probes and record honest results.
+
+Fixes found during verification (all committed):
+
+- Camera self-test threw `IllegalArgumentException: No handler given` — the probe
+  passed a `null` `Handler` to `openCamera` while on a non-Looper thread. Fixed
+  with a dedicated `HandlerThread`.
+- One failing probe aborted the whole `runAll()`; each probe is now isolated.
+- Mic self-test false-positived "BLOCKED" on a cold `AudioRecord`; it now
+  discards warm-up buffers and reads over a 1.5 s window.
+- Camera/mic reads used the software toggle type; switched to the combined query.
+- `DevicePolicyBackend` treated a plain device admin as camera-capable; now
+  requires ownership, so it skips cleanly instead of throwing.
 
 Definition of done: the §7 verification matrix is filled in with real results.
 
@@ -109,13 +151,17 @@ self-test and an external sensor-test app.
 
 | Primitive | Device-wide? | Expected when blocked | Verified? |
 |---|---|---|---|
-| All-sensor switch | yes | no sensor events; camera refused; mic silenced | [ ] |
-| Camera privacy toggle | yes (all lenses) | camera will not open | [ ] |
-| Mic privacy toggle | yes | recordings silent / muted | [ ] |
-| `setCameraDisabled` / `DISALLOW_CAMERA` | yes | camera refused at CameraService | [ ] |
-| `no_unmute_microphone` | yes | mic forced muted | [ ] |
-| `appops … ignore` | per-app | only that app is refused | [ ] |
-| `sensorservice set-uid-state idle` | per-app | that app sees no sensors | [ ] |
+| All-sensor switch | yes | no sensor events; camera refused; mic silenced | ✅ sensors + mic blocked; **camera NOT blocked on this ROM** |
+| Camera privacy toggle | yes (all lenses) | camera will not open | ✅ `CAMERA_DISABLED — disabled by policy` |
+| Mic privacy toggle | yes | recordings silent / muted | ✅ silent capture (peak 0) |
+| `setCameraDisabled` / `DISALLOW_CAMERA` | yes | camera refused at CameraService | ⛔ needs device owner (unreachable here) |
+| `no_unmute_microphone` | yes | mic forced muted | ⛔ needs device owner |
+| `appops … ignore` | per-app | only that app is refused | ☐ not yet tested |
+| `sensorservice set-uid-state idle` | per-app | that app sees no sensors | ☐ not yet tested |
+
+Test setup: an OEM device, Android 13, non-rooted; Shizuku v13.6.0 server as uid 2000;
+SensorBlock debug build, hidden-API exemptions enabled. Ground truth read with
+`adb shell service call sensor_privacy …` (tx6/7/8) and `dumpsys media.camera`.
 
 ---
 
@@ -150,6 +196,8 @@ available.
 
 1. ~~Add `.gitignore`, initialise git, commit the current state~~ ✅ done.
 2. ~~`aidl = true` + the three hidden-API fixes → green build (Milestone 1)~~ ✅ done.
-3. **Next:** install on the Android 13 device; run `SelfTest`; fill the matrix
-   (Milestone 2).
-4. Scaffold `crates/` once enforcement is proven (Milestone 3).
+3. ~~Install on the Android 13 device; drive the app via the debug harness; verify
+   the all-sensor switch, camera toggle and mic toggle end-to-end~~ ✅ done.
+4. **Next:** verify per-app `appops` + `set-uid-state`, and persistence across
+   reboot (Milestone 2).
+5. Scaffold `crates/` once enforcement is proven (Milestone 3).

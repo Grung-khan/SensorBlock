@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Debug-only: drives the real enforcement path from adb (see DebugActions). -->
+    <application>
+        <activity
+            android:name="com.sensorblock.app.debug.DebugActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="com.sensorblock.app.debug.POLICY" />
+                <action android:name="com.sensorblock.app.debug.CAPS" />
+                <action android:name="com.sensorblock.app.debug.OBSERVE" />
+                <action android:name="com.sensorblock.app.debug.SELFTEST" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+        <receiver
+            android:name="com.sensorblock.app.debug.DebugReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.sensorblock.app.debug.POLICY" />
+                <action android:name="com.sensorblock.app.debug.CAPS" />
+                <action android:name="com.sensorblock.app.debug.OBSERVE" />
+                <action android:name="com.sensorblock.app.debug.SELFTEST" />
+            </intent-filter>
+        </receiver>
+    </application>
+
+</manifest>

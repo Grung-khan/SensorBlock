@@ -75,6 +75,33 @@ independent mechanisms**:
    - `MICROPHONE` toggle → AudioService mutes the mic
      (`mMicMuteFromPrivacyToggle` → `setMicrophoneMuteNoCallerCheck`).
 
+> **Addendum — OEM variance (verified on the target device, an OEM ROM, Android 13, 2026-10).** The AOSP statements above do **not** hold
+> everywhere:
+>
+> - **The all-sensor switch does *not* block the camera on this ROM.** With
+>   `isSensorPrivacyEnabled() == true`, hardware sensors stop and recordings are
+>   silenced, but the camera still opens (`dumpsys media.camera` shows the client
+>   connecting). Camera blocking on such ROMs must go through the **camera privacy
+>   toggle**, not the all-sensor switch.
+> - **Read the per-sensor toggle with `isCombinedToggleSensorPrivacyEnabled(sensor)`,
+>   not `isToggleSensorPrivacyEnabled(toggleType, sensor)`.** The write path
+>   (`setToggleSensorPrivacy`) has no toggle-type argument, and this ROM lands the
+>   write on a non-software toggle, so a `TOGGLE_TYPE_SOFTWARE`-only read returns
+>   `false` even while the block is active (false negative).
+> - **`supportsSensorToggle` is advisory and was wrong here** — it returned `false`
+>   for both `CAMERA` and `MICROPHONE` even though `setToggleSensorPrivacy` worked.
+>   Do **not** gate camera/mic capability on it; reconcile verifies the real result.
+> - **Consequence for the app: the master switch must drive the camera and
+>   microphone toggles itself.** Since the all-sensor switch does not cover the
+>   camera on this ROM, `reconcile` treats the master as a superset —
+>   `DesiredPolicy.effectiveBlockCamera = blockCamera || blockAllSensors` (same for
+>   the microphone) — so one master ON blocks sensors *and* camera *and* mic, and
+>   no per-toggle action is required from the user. Verified on device (see
+>   `ROADMAP.md`, Milestone 2).
+> - **`disable-camera` requires a device/profile owner on API 31+**, not merely an
+>   active device admin (`DA_DISALLOWED_POLICIES`); a plain admin gets
+>   `SecurityException`.
+
 Permission gate: `android.permission.MANAGE_SENSOR_PRIVACY`, protection level
 `internal|role|installer`. A normal app cannot be granted it, **but `shell`
 (uid 2000) holds it** (declared in `packages/Shell/AndroidManifest.xml`) → Shizuku
@@ -275,6 +302,10 @@ SensorBlock/
 │      │   ├─ admin/            (SensorBlockDeviceAdminReceiver)
 │      │   └─ service/          (ReassertService, BootReceiver)
 │      └─ res/
+├─ app/src/debug/
+│   ├─ AndroidManifest.xml      (debug-only: registers the harness)
+│   └─ java/com/sensorblock/app/debug/  (DebugActions, DebugReceiver, DebugActivity)
+│                                        adb-driven harness, §6.5 — never in release
 └─ crates/                      (NOT created yet — the `buildRustNative` task in
                                  app/build.gradle.kts points here but the dirs/crates are missing)
 ```
@@ -357,6 +388,13 @@ do not regress these three fixes):**
 4. `buildRustNative` (§5.5) is a separate task and never runs during
    `assembleDebug`, so a missing Rust crate does not break the Kotlin build.
    Running it needs `cargo install cargo-ndk` and `crates/sensorblock-native/`.
+5. **Runtime hidden-API enforcement must be bypassed.** Calling the mirrored
+   `ISensorPrivacyManager.Stub.asInterface` from an app process triggers
+   `Accessing hidden method … (api=blocked, denied)` and throws. The app depends
+   on `org.lsposed.hiddenapibypass:hiddenapibypass:6.1` and calls
+   `HiddenApiBypass.addHiddenApiExemptions("L")` in `SensorBlockApp.onCreate`
+   (`exemptHiddenApis()`). Removing either reintroduces the crash at
+   `SensorPrivacyClient.connect()`.
 
 ### 6.2 Install
 
@@ -391,6 +429,44 @@ adb shell cmd sensorservice set-uid-state com.foo idle  # per-app sensor kill
 adb shell appops set com.foo RECORD_AUDIO ignore        # per-app mic block
 adb shell dumpsys sensorservice | head -50              # see live sensor list
 ```
+
+Read back the sensor-privacy state (there is no shell *read* command):
+
+```sh
+adb shell service call sensor_privacy 6                 # tx6 all-sensor (bool)
+adb shell service call sensor_privacy 7 i32 2           # tx7 combined camera
+adb shell service call sensor_privacy 7 i32 1           # tx7 combined microphone
+# Parcel(00000000 00000001) = (no exception, true); ...00000000 = false
+```
+
+### 6.5 On-device debug harness (debug builds only)
+
+`app/src/debug/**` contains a harness that drives the **real** `PolicyEngine` and
+`SelfTest` from `adb`, so enforcement can be exercised without the UI. It is in
+the `debug` source set and never ships in a release build.
+
+```sh
+PKG=com.sensorblock.app.debug
+D=$PKG/com.sensorblock.app.debug.DebugActivity
+# apply a policy (real reconcile), read it back, or run diagnostics
+adb shell am start -n $D -a $PKG.POLICY --ez blockCamera true
+adb shell am start -n $D -a $PKG.OBSERVE
+adb shell am start -n $D -a $PKG.SELFTEST
+adb shell am start -n $D -a $PKG.CAPS
+# results (the ROM suppresses this app's logcat — read the file instead):
+adb shell run-as $PKG cat files/debug.log
+```
+
+Device quirks this harness works around (do not "fix" these as app bugs):
+
+- **`uiautomator dump` is broken** on this OEM build
+  (`/sys/board_info/user_cpu_freq: EACCES` → "null root node"). UI automation is
+  unavailable; use the harness.
+- **Plain `adb shell am broadcast` to the app is silently dropped** by the ROM
+  (nothing enqueues in `dumpsys activity broadcasts`). A **translucent
+  `DebugActivity`** triggered with `am start` is used instead.
+- **App `logcat` output is suppressed/flooded**, so results are written to
+  `<filesDir>/debug.log` (read with `run-as`) as well as logged.
 
 ---
 
@@ -505,8 +581,10 @@ honest grouped-vs-independent UI.
 - [x] Write boot/foreground re-assertion (`ReassertService`, `BootReceiver`).
 - [x] Write diagnostics self-test (`SelfTest`).
 - [x] **Make it compile** — `./gradlew :app:assembleDebug` is green; fixes in §6.1 (aidl=true, AIDL all-or-none ids, hidden-API → public equivalents).
+- [x] Add the debug harness (`app/src/debug/**`, §6.5) and start Shizuku on the device.
+- [x] **On-device: all-sensor switch + camera toggle + mic toggle verified** end-to-end through the app (sensors/mic silenced, camera disabled by policy); see `ROADMAP.md` Milestone 2.
+- [ ] On-device: per-app appops / `set-uid-state`, device-owner layer, reboot persistence (§7 matrix).
 - [ ] Rust provisioning CLI (`sensorblockctl`) + native self-test crate (`crates/` not created).
-- [ ] On-device verification matrix (§7).
 
 > Detailed status, ordered next steps and the verification matrix live in
 > [`ROADMAP.md`](ROADMAP.md). Keep the two files in sync: this file owns the

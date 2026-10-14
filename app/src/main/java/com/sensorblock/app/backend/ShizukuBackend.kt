@@ -48,12 +48,15 @@ class ShizukuBackend(private val context: Context) : PrivilegedBackend {
         val client = if (granted) sensorPrivacy() else null
         val toggles = buildSet {
             if (client != null) {
-                if (client.supportsToggle(SensorPrivacyClient.SENSOR_CAMERA)) {
-                    add(SensorPrivacyClient.SENSOR_CAMERA)
-                }
-                if (client.supportsToggle(SensorPrivacyClient.SENSOR_MICROPHONE)) {
-                    add(SensorPrivacyClient.SENSOR_MICROPHONE)
-                }
+                // `supportsSensorToggle` is advisory and unreliable: some OEM
+                // ROMs (e.g. this OEM ROM) return false
+                // for both toggle types while `setToggleSensorPrivacy` still
+                // works and `isCombinedToggleSensorPrivacyEnabled` reports it.
+                // The sensor-privacy service only ever exposes these two, so
+                // treat them as toggleable whenever the service is reachable;
+                // reconcile verifies the real result afterwards.
+                add(SensorPrivacyClient.SENSOR_CAMERA)
+                add(SensorPrivacyClient.SENSOR_MICROPHONE)
             }
         }
         val shellReady = if (granted) runCatching { shell.acquire(SHELL_PROBE_TIMEOUT_MS) }.getOrNull() != null else false
@@ -166,10 +169,12 @@ class ShizukuBackend(private val context: Context) : PrivilegedBackend {
             requireClient().setAllSensorsBlocked(blocked)
         }
 
-        // 2. Camera and microphone privacy toggles.
+        // 2. Camera and microphone privacy toggles. Driven by the *effective*
+        //    values so the master switch also blocks each of them — the all-sensor
+        //    switch does not cover the camera on some OEM ROMs (verified on an OEM ROM).
         actions += leverAction(
             target = "Camera privacy toggle",
-            desired = desired.blockCamera,
+            desired = desired.effectiveBlockCamera,
             previous = observed.cameraPrivacyToggle,
         ) { blocked ->
             requireClient().setToggleEnabled(SensorPrivacyClient.SENSOR_CAMERA, blocked)
@@ -177,7 +182,7 @@ class ShizukuBackend(private val context: Context) : PrivilegedBackend {
 
         actions += leverAction(
             target = "Microphone privacy toggle",
-            desired = desired.blockMicrophone,
+            desired = desired.effectiveBlockMicrophone,
             previous = observed.microphonePrivacyToggle,
         ) { blocked ->
             requireClient().setToggleEnabled(SensorPrivacyClient.SENSOR_MICROPHONE, blocked)

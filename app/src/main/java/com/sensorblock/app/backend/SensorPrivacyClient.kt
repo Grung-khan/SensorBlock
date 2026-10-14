@@ -29,9 +29,17 @@ class SensorPrivacyClient private constructor(
         service.setSensorPrivacy(blocked)
     }
 
-    /** Reads the per-sensor privacy toggle for [sensor]. */
+    /**
+     * Reads whether the per-sensor privacy toggle is on for [sensor].
+     *
+     * Uses the *combined* query (both toggle types) rather than
+     * `isToggleSensorPrivacyEnabled(toggleType, sensor)`: the latter needs a
+     * toggle type, and OEM ROMs disagree on which one the setter writes (this
+     * device writes the non-software toggle, so a software-only read always
+     * returned false even when the block was active).
+     */
     fun isToggleEnabled(sensor: Int): Boolean =
-        service.isToggleSensorPrivacyEnabled(TOGGLE_TYPE_SOFTWARE, sensor)
+        service.isCombinedToggleSensorPrivacyEnabled(sensor)
 
     /** Sets the per-sensor privacy toggle for [sensor]. */
     fun setToggleEnabled(sensor: Int, enabled: Boolean) {
