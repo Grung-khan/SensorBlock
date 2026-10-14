@@ -1,7 +1,6 @@
 package com.sensorblock.app.backend
 
 import android.hardware.ISensorPrivacyManager
-import android.os.UserHandle
 import android.util.Log
 import rikka.shizuku.ShizukuBinderWrapper
 import rikka.shizuku.SystemServiceHelper
@@ -36,7 +35,7 @@ class SensorPrivacyClient private constructor(
 
     /** Sets the per-sensor privacy toggle for [sensor]. */
     fun setToggleEnabled(sensor: Int, enabled: Boolean) {
-        service.setToggleSensorPrivacy(UserHandle.myUserId(), SOURCE_SHELL, sensor, enabled)
+        service.setToggleSensorPrivacy(USER_CURRENT, SOURCE_SHELL, sensor, enabled)
     }
 
     /** Whether the device implements a software toggle for [sensor] at all. */
@@ -64,6 +63,15 @@ class SensorPrivacyClient private constructor(
          * interaction log; it is not permission-relevant.
          */
         const val SOURCE_SHELL = 4
+
+        /**
+         * `android.os.UserHandle.USER_CURRENT` is `@hide` in the public SDK, so it
+         * cannot be referenced directly. The value `-2` is the documented platform
+         * constant (aosp `core/java/android/os/UserHandle.java:59`). The service
+         * resolves it to the active user in `setToggleSensorPrivacy`, so this avoids
+         * the `@hide` `UserHandle.myUserId()` entirely.
+         */
+        private const val USER_CURRENT = -2
 
         private const val SERVICE_NAME = "sensor_privacy"
 

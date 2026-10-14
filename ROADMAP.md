@@ -19,15 +19,17 @@ only (§8.5). Identity: package `com.sensorblock.app`, name **SensorBlock**.
 ## Current status snapshot
 
 The full Kotlin app is written (§5.1 architecture) — UI, domain, both privileged
-backends, persistence, boot re-assertion and diagnostics. It is **not yet a
-working artifact**:
+backends, persistence, boot re-assertion and diagnostics. **It now compiles:**
+`./gradlew :app:assembleDebug` produces `app-debug.apk` (Milestone 1 done).
 
-1. `./gradlew :app:assembleDebug` **does not compile** (see Milestone 1).
-2. Nothing has been run on a device; all backend behaviour is unverified (§7).
-3. The Rust crates (`crates/`) do not exist yet (§5.5).
+Still outstanding:
 
-Current layout, verified files and the two compile blockers are recorded in
-`AGENTS.md` §5.3 and §6.1. Do **not** claim the block works until Milestone 2.
+1. Nothing has been run on a device; all backend behaviour is unverified (§7).
+2. The Rust crates (`crates/`) do not exist yet (§5.5).
+
+Current layout, verified files and the three compile fixes that must not regress
+are recorded in `AGENTS.md` §5.3 and §6.1. Do **not** claim the block works
+until Milestone 2.
 
 ---
 
@@ -41,25 +43,23 @@ Current layout, verified files and the two compile blockers are recorded in
       Camera/Mic; Compose/M3; layered Shizuku **and** device-owner; Rust CLI +
       native self-test; package `com.sensorblock.app`.
 
-## Milestone 1 — Make it compile 🚧 (in progress)
+## Milestone 1 — Make it compile ✅
 
-The scaffold exists but `compileDebugKotlin` fails. Two independent root causes
-(detailed in `AGENTS.md` §6.1):
+`./gradlew :app:assembleDebug` is **green** and produces
+`app/build/outputs/apk/debug/app-debug.apk`. Three fixes were required (keep them
+regressed-proof; detail in `AGENTS.md` §6.1):
 
-- [ ] **Gotcha #1 — AIDL disabled.** AGP 8 turns AIDL off by default, so the
-      hand-mirrored AIDL under `app/src/main/aidl/` is never compiled. Fix:
-      `android.buildFeatures { aidl = true }` in `app/build.gradle.kts`.
-      Until then every AIDL type (`ISensorPrivacyManager`, `IShellService`, the
-      `…shell` package) is "unresolved" and the whole `backend/` package cascades.
-- [ ] **Gotcha #2 — hidden `@hide` APIs.** The public `android.jar` lacks symbols
-      the code references directly: `UserManager.DISALLOW_CAMERA`,
-      `Sensor.handle`, `UserHandle.myUserId()`, plus a wrong public method name
-      (`Sensor.getMaxRange` → the real public API is `getMaximumRange`).
-      Fix by using public equivalents / public-constant values (see Decision D1
-      below) — **not** by hard-coding Binder transaction indices.
+- [x] **AIDL enabled.** `android.buildFeatures { aidl = true }` — AGP 8 disables
+      AIDL by default; without it every AIDL type cascades into `backend/`.
+- [x] **AIDL all-or-none method ids.** `IShellService.aidl` assigns ids to all
+      methods (`runCommand=1`, `runCommandStdout=2`, `uid=3`, `destroy=16777114`),
+      and `ShellUserService` implements all four (including `destroy()`).
+- [x] **Hidden `@hide` APIs → public equivalents.** `Sensor.getId()` /
+      `getMaximumRange()`, `UserHandle.USER_CURRENT` instead of `myUserId()`, and
+      a named `"no_camera"` constant for `UserManager.DISALLOW_CAMERA`
+      (see Decision D1).
 
-Definition of done: `./gradlew :app:assembleDebug` produces
-`app/build/outputs/apk/debug/app-debug.apk` with zero errors.
+Definition of done: ✅ APK builds with zero errors.
 
 ## Milestone 2 — On-device verification 🔴
 
@@ -132,7 +132,7 @@ self-test and an external sensor-test app.
 
 ## Decision log (project-specific, beyond `AGENTS.md` §8)
 
-**D1 — Resolve the hidden-API blocker with public APIs, not literals-as-hacks.**
+**D1 — Resolve hidden-API references with public equivalents (applied in Milestone 1).**
 - `Sensor`: use public `getId()` (stable handle) and `getMaximumRange()`.
 - `UserHandle.myUserId()`: the `sensor_privacy` service resolves
   `UserHandle.USER_CURRENT` (`-2`) to the active user, so pass that instead of
@@ -148,7 +148,8 @@ available.
 
 ## Next actions (ordered)
 
-1. Add `.gitignore`, initialise git, commit the current state (checkpoint).
-2. `aidl = true` + the three hidden-API fixes → get a green build (Milestone 1).
-3. Install on the Android 13 device; run `SelfTest`; fill the matrix (Milestone 2).
+1. ~~Add `.gitignore`, initialise git, commit the current state~~ ✅ done.
+2. ~~`aidl = true` + the three hidden-API fixes → green build (Milestone 1)~~ ✅ done.
+3. **Next:** install on the Android 13 device; run `SelfTest`; fill the matrix
+   (Milestone 2).
 4. Scaffold `crates/` once enforcement is proven (Milestone 3).

@@ -19,11 +19,11 @@ interface IShellService {
     void destroy() = 16777114;
 
     /** Runs `cmd` through `sh -c` as uid 2000 and returns stdout+stderr, exit code prefixed. */
-    String runCommand(String cmd);
+    String runCommand(String cmd) = 1;
 
     /** Convenience: runs `cmd` and returns only stdout, trimmed. */
-    String runCommandStdout(String cmd);
+    String runCommandStdout(String cmd) = 2;
 
     /** uid the service is actually running as (should be 2000). */
-    int uid();
+    int uid() = 3;
 }

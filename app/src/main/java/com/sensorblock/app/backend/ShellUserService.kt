@@ -37,6 +37,16 @@ class ShellUserService : IShellService.Stub {
 
     override fun uid(): Int = Process.myUid()
 
+    /**
+     * Required by the Shizuku user-service contract. Shizuku calls this (at the
+     * reserved transaction id) when the service should tear itself down. The
+     * service is a stateless command runner, so teardown is just ending the
+     * shell-uid process — the documented Shizuku pattern.
+     */
+    override fun destroy() {
+        Process.killProcess(Process.myPid())
+    }
+
     override fun runCommandStdout(cmd: String): String {
         val merged = exec(cmd)
         return merged.substringAfter('\n', "")

@@ -331,20 +331,30 @@ Pinned versions (match cache): AGP `8.7.2`, Kotlin `2.0.20`, Compose compiler vi
 the Kotlin 2.0 `org.jetbrains.kotlin.plugin.compose` plugin. `compileSdk 35`,
 `minSdk 31`, `targetSdk 33` (Android 13 behaviour).
 
-**Build gotchas (as of the scaffold commit — `assembleDebug` does NOT yet compile):**
+**Build gotchas (the build now compiles — `./gradlew :app:assembleDebug` is green;
+do not regress these three fixes):**
 
 1. **AGP 8 disables AIDL by default.** The hand-mirrored AIDL in `app/src/main/aidl/`
-   is not compiled unless `android.buildFeatures { aidl = true }` is set in
-   `app/build.gradle.kts`. Without it, every AIDL type
-   (`ISensorPrivacyManager`, `IShellService`, the `…shell` package) is "unresolved".
-2. **Hidden/`@hide` APIs are referenced directly** and the public `android.jar`
-   does not contain them. Verified culprits from the last `compileDebugKotlin`:
-   `UserManager.DISALLOW_CAMERA`, `Sensor.handle`, `UserHandle.myUserId()`
-   (`DISALLOW_UNMUTE_MICROPHONE` *does* resolve — don't "fix" what isn't broken).
-   These need a real fix (platform `framework.jar` on the compile classpath via
-   `compileOnly`, or reflection) — do not "solve" it by hard-coding values.
-   `compileDebugKotlin` currently fails on these; do not assume the block works.
-3. `buildRustNative` (§5.5) is a separate task and never runs during
+   is only compiled because `android.buildFeatures { aidl = true }` is set in
+   `app/build.gradle.kts`. Removing it makes every AIDL type
+   (`ISensorPrivacyManager`, `IShellService`, the `…shell` package) "unresolved"
+   and cascades into the whole `backend/` package.
+2. **AIDL method ids are all-or-none.** If *any* method in an interface has an
+   explicit transaction id, *all* of them must (the AIDL compiler rejects a mix).
+   `IShellService.aidl` therefore assigns `runCommand = 1`, `runCommandStdout = 2`,
+   `uid = 3` alongside the reserved `destroy = 16777114`, and `ShellUserService`
+   implements all four (including `destroy()`, which Shizuku invokes to tear the
+   service down). `ISensorPrivacyManager.aidl` assigns **no** ids, so its codes
+   come from AOSP declaration order (§6.1 note in the file header).
+3. **Hidden `@hide` APIs are resolved with public equivalents**, not a
+   `framework.jar`. See ROADMAP.md decision **D1**:
+   - `Sensor`: use public `getId()` (stable handle) and `getMaximumRange()`
+     (not the hidden `getHandle()` / the non-existent `getMaxRange()`).
+   - `UserHandle.myUserId()` → pass `UserHandle.USER_CURRENT` (`-2`); the service
+     resolves it to the active user.
+   - `UserManager.DISALLOW_CAMERA` (`@hide`) → named constant `"no_camera"`
+     (documented platform value). `DISALLOW_UNMUTE_MICROPHONE` *is* public — don't "fix" it.
+4. `buildRustNative` (§5.5) is a separate task and never runs during
    `assembleDebug`, so a missing Rust crate does not break the Kotlin build.
    Running it needs `cargo install cargo-ndk` and `crates/sensorblock-native/`.
 
@@ -494,6 +504,10 @@ honest grouped-vs-independent UI.
 - [x] Write `PolicyEngine` reconcile + `PolicyStore` persistence.
 - [x] Write boot/foreground re-assertion (`ReassertService`, `BootReceiver`).
 - [x] Write diagnostics self-test (`SelfTest`).
-- [ ] **Make it compile** — `assembleDebug` fails; fix §6.1 gotcha #1 (`aidl = true`) then #2 (hidden-API access). Nothing is verified on-device yet.
+- [x] **Make it compile** — `./gradlew :app:assembleDebug` is green; fixes in §6.1 (aidl=true, AIDL all-or-none ids, hidden-API → public equivalents).
 - [ ] Rust provisioning CLI (`sensorblockctl`) + native self-test crate (`crates/` not created).
 - [ ] On-device verification matrix (§7).
+
+> Detailed status, ordered next steps and the verification matrix live in
+> [`ROADMAP.md`](ROADMAP.md). Keep the two files in sync: this file owns the
+> *why*, that file owns the *what/when*.

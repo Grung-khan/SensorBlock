@@ -63,7 +63,7 @@ class DevicePolicyBackend(private val context: Context) : PrivilegedBackend {
         } else {
             null
         },
-        cameraUserRestriction = readRestriction(UserManager.DISALLOW_CAMERA),
+        cameraUserRestriction = readRestriction(DISALLOW_CAMERA),
         microphoneRestricted = readRestriction(UserManager.DISALLOW_UNMUTE_MICROPHONE),
         readAtEpochMs = System.currentTimeMillis(),
     )
@@ -102,7 +102,7 @@ class DevicePolicyBackend(private val context: Context) : PrivilegedBackend {
                 available = true,
                 unavailableReason = null,
             ) { blocked ->
-                setRestriction(UserManager.DISALLOW_CAMERA, blocked)
+                setRestriction(DISALLOW_CAMERA, blocked)
             }
 
             val wantMicRestricted = desired.blockMicrophone || desired.blockAllSensors
@@ -187,6 +187,14 @@ class DevicePolicyBackend(private val context: Context) : PrivilegedBackend {
 
     companion object {
         private const val TAG = "DevicePolicyBackend"
+
+        /**
+         * `UserManager.DISALLOW_CAMERA` is `@hide` in the public SDK, so it cannot
+         * be referenced directly. `"no_camera"` is the documented platform value
+         * (aosp `core/java/android/os/UserManager.java:1200`). `DISALLOW_UNMUTE_MICROPHONE`
+         * below *is* public and is used as-is.
+         */
+        private const val DISALLOW_CAMERA = "no_camera"
 
         /** The ADB command that makes SensorBlock the device owner. */
         fun deviceOwnerCommand(packageName: String): String =

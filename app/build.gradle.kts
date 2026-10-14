@@ -49,6 +49,9 @@ android {
 
     buildFeatures {
         compose = true
+        // AGP 8 disables AIDL by default; the mirrored sensor-privacy / shell
+        // interfaces in src/main/aidl must be compiled (see ROADMAP.md Milestone 1).
+        aidl = true
     }
 
     packaging {

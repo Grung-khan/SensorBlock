@@ -37,13 +37,14 @@ class SensorInventory(private val context: Context) {
     fun count(): Int = all().count { !it.isDynamic }
 
     private fun Sensor.toInfo(): SensorInfo = SensorInfo(
-        handle = handle,
+        // Public getId() returns the same stable id as the hidden getHandle().
+        handle = id,
         name = name,
         vendor = vendor,
         version = version,
         type = type,
         typeName = typeName(this),
-        maxRange = maxRange,
+        maxRange = maximumRange,
         resolution = resolution,
         powerMilliAmp = power,
         minDelayMicros = minDelay,
