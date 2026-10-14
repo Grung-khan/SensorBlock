@@ -1,10 +1,15 @@
 package com.sensorblock.app.ui
 
 import android.app.Application
+import android.app.StatusBarManager
+import android.content.ComponentName
 import android.content.Intent
+import android.graphics.drawable.Icon
+import android.os.Build
 import android.provider.Settings
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.sensorblock.app.R
 import com.sensorblock.app.SensorBlockApp
 import com.sensorblock.app.domain.AppEntry
 import com.sensorblock.app.domain.AppOpKind
@@ -15,6 +20,7 @@ import com.sensorblock.app.domain.ObservedState
 import com.sensorblock.app.domain.ReconcileReport
 import com.sensorblock.app.domain.SelfTest
 import com.sensorblock.app.domain.SensorInfo
+import com.sensorblock.app.service.MasterTileService
 import com.sensorblock.app.service.ReassertService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -182,6 +188,43 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             )
         }.onFailure { message("Could not open developer options") }
+    }
+
+    /**
+     * Prompts the user to add the master Quick Settings tile (API 33+). Older
+     * releases have no request API, so we just explain the manual route.
+     */
+    fun requestAddTile() {
+        val context = getApplication<Application>()
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            message(context.getString(R.string.add_tile_manual))
+            return
+        }
+        val statusBar = context.getSystemService(StatusBarManager::class.java)
+        if (statusBar == null) {
+            message(context.getString(R.string.add_tile_failed))
+            return
+        }
+        runCatching {
+            statusBar.requestAddTileService(
+                ComponentName(context, MasterTileService::class.java),
+                context.getString(R.string.tile_master_label),
+                Icon.createWithResource(context, R.drawable.ic_tile_master),
+                java.util.concurrent.Executor { it.run() },
+                java.util.function.Consumer<Int> { result ->
+                    message(
+                        context.getString(
+                            when (result) {
+                                StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED,
+                                StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ALREADY_ADDED,
+                                -> R.string.add_tile_added
+                                else -> R.string.add_tile_failed
+                            },
+                        ),
+                    )
+                },
+            )
+        }.onFailure { message(context.getString(R.string.add_tile_failed)) }
     }
 
     // -------------------------------------------------------------- mutations ---

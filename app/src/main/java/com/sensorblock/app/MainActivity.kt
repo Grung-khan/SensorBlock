@@ -99,6 +99,7 @@ private fun SensorBlockRoot(viewModel: MainViewModel) {
             requestShizuku = viewModel::requestShizuku,
             openShizuku = viewModel::openShizuku,
             openDeveloperOptions = viewModel::openDeveloperOptions,
+            requestAddTile = viewModel::requestAddTile,
             runSelfTest = viewModel::runSelfTest,
             consumeMessage = { viewModel.message(null) },
         )

@@ -6,4 +6,14 @@
     <string name="notif_channel_reassert_desc">Keeps the selected sensor, camera and microphone blocks applied.</string>
     <string name="notif_reassert_title">SensorBlock is enforcing your policy</string>
     <string name="notif_reassert_text">Blocks are applied and will be re-applied after reboot or reconnect.</string>
+
+    <string name="tile_master_label">SensorBlock</string>
+    <string name="tile_master_on">Blocking</string>
+    <string name="tile_master_off">Sensors on</string>
+    <string name="tile_master_unavailable">Shizuku off</string>
+    <string name="tile_master_desc">All sensors, camera and microphone</string>
+    <string name="add_tile_button">Add master switch to Quick Settings</string>
+    <string name="add_tile_manual">Open Quick Settings, tap the edit (pencil) button, then drag SensorBlock into place.</string>
+    <string name="add_tile_added">Master switch added to Quick Settings</string>
+    <string name="add_tile_failed">Could not add the tile — add it manually from the Quick Settings editor.</string>
 </resources>

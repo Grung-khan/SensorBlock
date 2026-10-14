@@ -20,6 +20,7 @@ data class AppActions(
     val requestShizuku: () -> Unit = {},
     val openShizuku: () -> Unit = {},
     val openDeveloperOptions: () -> Unit = {},
+    val requestAddTile: () -> Unit = {},
     val runSelfTest: () -> Unit = {},
     val consumeMessage: () -> Unit = {},
 )

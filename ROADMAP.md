@@ -121,6 +121,27 @@ Fixes found during verification (all committed):
 
 Definition of done: the §7 verification matrix is filled in with real results.
 
+## Milestone 2b — Quick Settings master tile 🟠 built, not device-verified
+
+- [x] `service/MasterTileService`: a QS tile that toggles the **master block**
+      (all sensors + camera + mic) by writing the same `blockAllSensors` policy as
+      the Home switch and running `PolicyEngine.apply()`. The tile shows
+      `STATE_ACTIVE`/`STATE_INACTIVE` and `STATE_UNAVAILABLE` when Shizuku is
+      unreachable; it makes no UI calls, so it needs no unlock.
+- [x] In-app **"Add master switch to Quick Settings"** button on Home, wired to
+      `StatusBarManager.requestAddTileService(...)` (public API 33; below 33 it
+      shows the manual-add hint).
+- [x] Long-press on the tile opens the app (`QS_TILE_PREFERENCES` on `MainActivity`).
+- [x] On-device: the tile registers in Quick Settings (`cmd statusbar add-tile`) and
+      `cmd statusbar click-tile` flips the all-sensor / camera / mic switches
+      together (verified via `service call sensor_privacy 6` / `7 i32 2` / `7 i32 1`).
+      It writes the same policy as the Home switch, so the two stay in sync.
+- [ ] On-device: the locked-keyguard tap, the UNAVAILABLE state when Shizuku is
+      down, and the in-app `requestAddTileService` prompt are not yet exercised.
+
+Definition of done: the tile toggles enforcement on a real device exactly like the
+Home master switch.
+
 ## Milestone 3 — Rust tooling 🔴
 
 `buildRustNative` is wired in `app/build.gradle.kts` but the crates are missing.

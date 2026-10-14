@@ -17,6 +17,8 @@ It exposes that as a small, honest UI:
 
 - a **master kill switch** that blocks the camera, the microphone **and** every
   hardware sensor at once;
+- a **Quick Settings tile** that toggles that same master block from the shade,
+  without opening the app (with an in-app "Add to Quick Settings" prompt);
 - independent **Camera** and **Microphone** switches;
 - a **Sensors** tab that lists every sensor the device exposes;
 - a per-app matrix (AppOps / `set-uid-state`) for camera, mic, body sensors and
@@ -158,6 +160,7 @@ Working and verified on a physical Android 13 device:
 - [x] Microphone privacy toggle
 - [x] Master switch blocks sensors **and** camera **and** microphone
 - [x] Reversible / idempotent reconcile
+- [x] Quick Settings master tile (toggle verified on device via `cmd statusbar click-tile`)
 - [ ] Per-app AppOps / `set-uid-state` and reboot persistence (not yet verified)
 - [ ] Release signing
 

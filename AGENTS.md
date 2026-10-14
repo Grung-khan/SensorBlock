@@ -302,7 +302,7 @@ SensorBlock/
 │      │   ├─ domain/           (Models, PolicyEngine, PolicyStore, SensorInventory, AppInventory, SelfTest)
 │      │   ├─ backend/          (PrivilegedBackend, ShizukuBackend, SensorPrivacyClient,
 │      │   │                     ShellServiceClient, ShellUserService)
-│      │   └─ service/          (ReassertService, BootReceiver)
+│      │   └─ service/          (ReassertService, BootReceiver, MasterTileService)
 │      └─ res/
 ├─ app/src/debug/
 │   ├─ AndroidManifest.xml      (debug-only: registers the harness)
@@ -327,6 +327,12 @@ No README, no `opencode.json`, no tests, no CI exist yet.
   activity, backed by appops + `set-uid-state`.
 - **Diagnostics**: live self-test ("attempt to read each sensor", "attempt to open
   camera/mic") proving the block works; exportable log.
+- **Quick Settings tile** (`service/MasterTileService`): one-tap master block from
+  the shade. It writes the *same* `blockAllSensors` policy as the Home switch (so
+  the two never disagree), runs the normal reconcile on a background thread, shows
+  ACTIVE/INACTIVE and UNAVAILABLE when Shizuku is unreachable, and needs no unlock.
+  A Home button offers the API 33 `StatusBarManager.requestAddTileService` prompt
+  (below 33 it explains the manual add route).
 - Design: Material 3 dynamic color, dark/light, large touch targets, clear
   warning copy for irreversible-ish or device-wide actions, confirm dialogs for
   device-wide blocks.
